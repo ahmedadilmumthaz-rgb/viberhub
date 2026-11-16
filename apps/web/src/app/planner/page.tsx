@@ -10,7 +10,9 @@ import {
   Filter,
   Send,
   User,
-  ArrowRight
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { Badge } from '../../components/Badge';
@@ -23,6 +25,7 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     async function loadPlanner() {
@@ -43,6 +46,57 @@ export default function PlannerPage() {
     if (filterStatus === 'ALL') return true;
     return t.status === filterStatus;
   });
+
+  const handlePrevMonth = () => {
+    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const calendarCells = [];
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    const dayNum = daysInPrevMonth - i;
+    calendarCells.push({
+      day: dayNum,
+      isCurrentMonth: false,
+      dateStr: new Date(year, month - 1, dayNum).toISOString().slice(0, 10)
+    });
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(year, month, i);
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+    calendarCells.push({
+      day: i,
+      isCurrentMonth: true,
+      isToday: new Date().toDateString() === d.toDateString(),
+      dateStr
+    });
+  }
+  const remaining = (7 - (calendarCells.length % 7)) % 7;
+  for (let i = 1; i <= remaining; i++) {
+    calendarCells.push({
+      day: i,
+      isCurrentMonth: false,
+      dateStr: new Date(year, month + 1, i).toISOString().slice(0, 10)
+    });
+  }
 
   return (
     <AppShell>
@@ -157,19 +211,102 @@ export default function PlannerPage() {
             )}
           </div>
         ) : (
-          /* Calendar Grid Placeholder */
-          <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm text-center">
-            <CalendarIcon className="w-12 h-12 text-violet-500 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-slate-800">Timeline & Task Scheduling View</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Visualizes upcoming campaign item deadlines across days and weeks to ensure operator staffing and preparation review cycles.
-            </p>
-            <div className="mt-6 grid grid-cols-7 gap-2 max-w-2xl mx-auto text-xs text-slate-600">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <div key={day} className="p-3 bg-slate-50 rounded-lg border border-slate-100 font-semibold">
-                  {day}
-                </div>
+          /* Interactive Month Calendar Grid */
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Calendar Month Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-bold text-slate-900">
+                  {monthNames[month]} {year}
+                </h2>
+                <button
+                  onClick={handleToday}
+                  className="px-2.5 py-1 rounded-md text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Today
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+                  title="Previous month"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleNextMonth}
+                  className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+                  title="Next month"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Day of Week Labels */}
+            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 text-center text-xs font-semibold text-slate-600 py-2.5">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day}>{day}</div>
               ))}
+            </div>
+
+            {/* Month Day Cells */}
+            <div className="grid grid-cols-7 divide-x divide-y divide-slate-100">
+              {calendarCells.map((cell, idx) => {
+                const dayTasks = filteredTasks.filter((t) => {
+                  if (!t.dueAt) return false;
+                  return t.dueAt.slice(0, 10) === cell.dateStr;
+                });
+
+                return (
+                  <div
+                    key={idx}
+                    className={`min-h-[110px] p-2 flex flex-col justify-between transition ${
+                      cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/60 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs font-semibold inline-flex items-center justify-center w-6 h-6 rounded-full ${
+                          cell.isToday
+                            ? 'bg-violet-600 text-white font-bold'
+                            : cell.isCurrentMonth
+                            ? 'text-slate-800'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {cell.day}
+                      </span>
+                      {dayTasks.length > 0 && (
+                        <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full">
+                          {dayTasks.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Day Task Chips */}
+                    <div className="space-y-1 mt-1.5 flex-1">
+                      {dayTasks.slice(0, 2).map((t) => (
+                        <Link
+                          key={t.id}
+                          href={`/campaigns/${t.campaignId}`}
+                          className="block p-1 rounded bg-violet-50/80 hover:bg-violet-100 border border-violet-100 text-[10px] font-medium text-violet-900 truncate transition"
+                          title={`${t.campaignTitle}: ${t.body}`}
+                        >
+                          <span className="font-semibold block truncate">{t.campaignTitle}</span>
+                        </Link>
+                      ))}
+                      {dayTasks.length > 2 && (
+                        <span className="block text-[10px] text-slate-400 font-semibold px-1">
+                          +{dayTasks.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

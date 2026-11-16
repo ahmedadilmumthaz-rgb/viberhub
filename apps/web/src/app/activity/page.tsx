@@ -9,7 +9,8 @@ import {
   User,
   Clock,
   Lock,
-  Calendar
+  Calendar,
+  Download
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { Badge } from '../../components/Badge';
@@ -21,6 +22,22 @@ export default function ActivityPage() {
   const [loading, setLoading] = useState(true);
   const [logType, setLogType] = useState<'activity' | 'audit'>('activity');
   const [search, setSearch] = useState('');
+
+  const handleExportCsv = async () => {
+    try {
+      const res = await apiClient(`/activity/export?type=${logType}`);
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `viberhub_${logType}_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Failed to export logs CSV');
+    }
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -58,25 +75,35 @@ export default function ActivityPage() {
             </p>
           </div>
 
-          {/* Type Toggle */}
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setLogType('activity')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                logType === 'activity' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              onClick={handleExportCsv}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
             >
-              Workflow Activity
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Export CSV</span>
             </button>
-            <button
-              onClick={() => setLogType('audit')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                logType === 'audit' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Security Audit Log</span>
-            </button>
+
+            {/* Type Toggle */}
+            <div className="flex rounded-lg border border-slate-200 bg-white p-1">
+              <button
+                onClick={() => setLogType('activity')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  logType === 'activity' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Workflow Activity
+              </button>
+              <button
+                onClick={() => setLogType('audit')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  logType === 'audit' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Security Audit Log</span>
+              </button>
+            </div>
           </div>
         </div>
 

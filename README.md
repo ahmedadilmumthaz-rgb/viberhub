@@ -50,18 +50,22 @@ npm run build
 ```
 
 ### 4. Start Development Servers
-In two separate terminals:
 ```bash
-# Terminal 1: Backend API (port 4000)
-npm run dev:api
+# Option A: One-step interactive launcher
+./scripts/dev.sh
 
-# Terminal 2: Frontend Dashboard (port 3000)
-npm run dev:web
+# Option B: Root npm dev script
+npm run dev
+
+# Option C: In two separate terminals
+npm run dev:api   # API service (port 4000)
+npm run dev:web   # Web dashboard (port 3000)
 ```
 
-Access the dashboard at `http://localhost:3000`. Default login credentials:
-- **Email**: `admin@viberhub.local`
-- **Password**: `Admin1234!`
+Access the dashboard at `http://localhost:3000`. Default seeded workspace accounts:
+- **Administrator**: `admin@viberhub.internal` / `AdminSecretPass123!`
+- **Reviewer**: `reviewer@viberhub.internal` / `ReviewerPass123!`
+- **Operator**: `operator@viberhub.internal` / `OperatorPass123!`
 
 ---
 

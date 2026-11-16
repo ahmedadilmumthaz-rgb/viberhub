@@ -45,6 +45,40 @@ router.get('/', (req: AuthenticatedRequest, res: Response) => {
   return res.json(successEnvelope(enriched));
 });
 
+router.get('/export', (req: AuthenticatedRequest, res: Response) => {
+  const type = (req.query.type as string) || 'audit';
+  const logs = type === 'audit'
+    ? Array.from(db.data.auditLogs.values()).filter((l) => l.workspaceId === req.workspaceId)
+    : Array.from(db.data.activityLogs.values()).filter((l) => l.workspaceId === req.workspaceId);
+
+  const enriched = logs.map((l) => {
+    const actor = db.data.users.get(l.actorId);
+    return {
+      ...l,
+      actorName: actor?.displayName || 'System'
+    };
+  });
+
+  enriched.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const headers = ['ID', 'Event Type', 'Actor', 'Target Type', 'Target ID', 'IP Address', 'Created At', 'Details'];
+  const rows = enriched.map((l) => [
+    `"${l.id}"`,
+    `"${l.action || l.eventType || ''}"`,
+    `"${l.actorName || ''}"`,
+    `"${l.entityType || l.targetType || ''}"`,
+    `"${l.entityId || l.targetId || ''}"`,
+    `"${l.ipAddress || '127.0.0.1'}"`,
+    `"${l.createdAt}"`,
+    `"${JSON.stringify(l.details || {}).replace(/"/g, '""')}"`
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="viberhub_${type}_logs_${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(csvContent);
+});
+
 router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   const act = db.data.activityLogs.get(req.params.id);
   const aud = db.data.auditLogs.get(req.params.id);
