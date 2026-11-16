@@ -1,0 +1,453 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+enum DestinationType {
+  INDIVIDUAL
+  GROUP
+  COMMUNITY
+  CHANNEL
+}
+
+enum ConsentStatus {
+  GRANTED
+  WITHDRAWN
+  UNKNOWN
+}
+
+enum CampaignStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum CampaignItemStatus {
+  PREPARED
+  REVIEWED
+  COMPLETED_MANUALLY
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum MemberRole {
+  OWNER
+  ADMINISTRATOR
+  EDITOR
+  REVIEWER
+  VIEWER
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+model User {
+  id           String            @id @default(uuid())
+  email        String            @unique
+  passwordHash String
+  displayName  String
+  status       AccountStatus     @default(ACTIVE)
+  mfaEnabled   Boolean           @default(false)
+  mfaSecret    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  memberships  WorkspaceMember[]
+  sessions     Session[]
+  devices      Device[]
+  campaigns    Campaign[]
+  approvals    ApprovalRecord[]
+  attachments  Attachment[]
+  createdTemplates MessageTemplate[] @relation("TemplateCreatedBy")
+  updatedTemplates MessageTemplate[] @relation("TemplateUpdatedBy")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+model Workspace {
+  id        String            @id @default(uuid())
+  name      String
+  timezone  String            @default("UTC")
+  locale    String            @default("en")
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  members   WorkspaceMember[]
+  contacts  Contact[]
+  tags      Tag[]
+  destinations Destination[]
+  templates MessageTemplate[]
+  campaigns Campaign[]
+  attachments Attachment[]
+  accounts  ViberAccount[]
+  devices   Device[]
+  importBatches ImportBatch[]
+  activityLogs ActivityLog[]
+  auditLogs AuditLog[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        MemberRole    @default(VIEWER)
+  status      AccountStatus @default(ACTIVE)
+  joinedAt    DateTime      @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model ViberAccount {
+  id          String        @id @default(uuid())
+  workspaceId String
+  displayName String
+  phoneLabel  String?
+  status      AccountStatus @default(ACTIVE)
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("viber_accounts")
+}
+
+model Device {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  deviceName  String
+  platform    String
+  pairedAt    DateTime  @default(now())
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("devices")
+}
+
+model Contact {
+  id            String          @id @default(uuid())
+  workspaceId   String
+  displayName   String
+  phoneOriginal String
+  phoneE164     String
+  email         String?
+  organization  String?
+  notes         String?
+  source        String          @default("manual")
+  archivedAt    DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tags          ContactTag[]
+  consentRecords ConsentRecord[]
+  destinations  Destination[]
+  campaignItems CampaignItem[]
+
+  @@unique([workspaceId, phoneE164])
+  @@index([workspaceId])
+  @@index([phoneE164])
+  @@index([archivedAt])
+  @@map("contacts")
+}
+
+model Tag {
+  id          String       @id @default(uuid())
+  workspaceId String
+  name        String
+  color       String?
+  archivedAt  DateTime?
+  createdAt   DateTime     @default(now())
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts    ContactTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([contactId])
+  @@index([tagId])
+  @@map("contact_tags")
+}
+
+model ConsentRecord {
+  id          String        @id @default(uuid())
+  workspaceId String
+  contactId   String
+  status      ConsentStatus @default(UNKNOWN)
+  purpose     String?
+  source      String
+  evidenceRef String?
+  recordedBy  String
+  recordedAt  DateTime      @default(now())
+
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([recordedAt])
+  @@map("consent_records")
+}
+
+model Destination {
+  id          String          @id @default(uuid())
+  workspaceId String
+  type        DestinationType @default(INDIVIDUAL)
+  displayName String
+  description String?
+  contactId   String?
+  notes       String?
+  status      AccountStatus   @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact     Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  campaignItems CampaignItem[]
+
+  @@index([workspaceId])
+  @@index([type])
+  @@map("destinations")
+}
+
+model MessageTemplate {
+  id          String    @id @default(uuid())
+  workspaceId String
+  name        String
+  category    String    @default("general")
+  body        String
+  createdBy   String
+  updatedBy   String
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User      @relation("TemplateCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updater     User      @relation("TemplateUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@index([category])
+  @@map("message_templates")
+}
+
+model Campaign {
+  id          String          @id @default(uuid())
+  workspaceId String
+  title       String
+  purpose     String          @default("")
+  notes       String?
+  status      CampaignStatus  @default(DRAFT)
+  ownerId     String
+  plannedAt   DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  items       CampaignItem[]
+  approvals   ApprovalRecord[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([plannedAt])
+  @@map("campaigns")
+}
+
+model CampaignItem {
+  id             String             @id @default(uuid())
+  workspaceId    String
+  campaignId     String
+  destinationId  String
+  contactId      String?
+  body           String
+  status         CampaignItemStatus @default(PREPARED)
+  dueAt          DateTime?
+  completionNote String?
+  completedBy    String?
+  completedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  campaign       Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  destination    Destination        @relation(fields: [destinationId], references: [id], onDelete: Restrict)
+  contact        Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  attachments    CampaignAttachment[]
+
+  @@index([workspaceId])
+  @@index([campaignId])
+  @@index([destinationId])
+  @@index([status])
+  @@index([dueAt])
+  @@map("campaign_items")
+}
+
+model Attachment {
+  id           String               @id @default(uuid())
+  workspaceId  String
+  storageKey   String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  checksum     String
+  uploadedBy   String
+  createdAt    DateTime             @default(now())
+
+  workspace    Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploader     User                 @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+  campaignItems CampaignAttachment[]
+
+  @@index([workspaceId])
+  @@map("attachments")
+}
+
+model CampaignAttachment {
+  campaignItemId String
+  attachmentId   String
+
+  campaignItem   CampaignItem @relation(fields: [campaignItemId], references: [id], onDelete: Cascade)
+  attachment     Attachment   @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@id([campaignItemId, attachmentId])
+  @@index([campaignItemId])
+  @@index([attachmentId])
+  @@map("campaign_attachments")
+}
+
+model ApprovalRecord {
+  id          String           @id @default(uuid())
+  workspaceId String
+  campaignId  String
+  itemId      String?
+  reviewerId  String
+  decision    ApprovalDecision
+  note        String?
+  decidedAt   DateTime         @default(now())
+
+  campaign    Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  reviewer    User             @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId])
+  @@index([campaignId])
+  @@index([reviewerId])
+  @@map("approval_records")
+}
+
+model ImportBatch {
+  id            String       @id @default(uuid())
+  workspaceId   String
+  entityType    String       @default("contact")
+  fileName      String
+  status        ImportStatus @default(PENDING)
+  totalRows     Int          @default(0)
+  importedRows  Int          @default(0)
+  rejectedRows  Int          @default(0)
+  errorDetails  String?
+  createdBy     String
+  createdAt     DateTime     @default(now())
+
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("import_batches")
+}
+
+model ActivityLog {
+  id          String    @id @default(uuid())
+  workspaceId String
+  actorId     String
+  action      String
+  entityType  String
+  entityId    String
+  metadata    String?
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  workspaceId String
+  actorId     String
+  eventType   String
+  targetType  String
+  targetId    String
+  ipAddress   String?
+  userAgent   String?
+  metadata    String?
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([eventType])
+  @@index([targetType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

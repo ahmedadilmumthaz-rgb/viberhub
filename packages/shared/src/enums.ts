@@ -1,0 +1,54 @@
+export enum AccountStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  REVOKED = 'REVOKED'
+}
+
+export enum DestinationType {
+  INDIVIDUAL = 'INDIVIDUAL',
+  GROUP = 'GROUP',
+  COMMUNITY = 'COMMUNITY',
+  CHANNEL = 'CHANNEL'
+}
+
+export enum ConsentStatus {
+  GRANTED = 'GRANTED',
+  WITHDRAWN = 'WITHDRAWN',
+  UNKNOWN = 'UNKNOWN'
+}
+
+export enum CampaignStatus {
+  DRAFT = 'DRAFT',
+  IN_REVIEW = 'IN_REVIEW',
+  APPROVED = 'APPROVED',
+  ARCHIVED = 'ARCHIVED'
+}
+
+export enum CampaignItemStatus {
+  PREPARED = 'PREPARED',
+  REVIEWED = 'REVIEWED',
+  COMPLETED_MANUALLY = 'COMPLETED_MANUALLY',
+  CANCELLED = 'CANCELLED'
+}
+
+export enum ApprovalDecision {
+  APPROVED = 'APPROVED',
+  CHANGES_REQUESTED = 'CHANGES_REQUESTED',
+  REJECTED = 'REJECTED'
+}
+
+export enum MemberRole {
+  OWNER = 'OWNER',
+  ADMINISTRATOR = 'ADMINISTRATOR',
+  EDITOR = 'EDITOR',
+  REVIEWER = 'REVIEWER',
+  VIEWER = 'VIEWER'
+}
+
+export enum ImportStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  COMPLETED_WITH_ERRORS = 'COMPLETED_WITH_ERRORS',
+  FAILED = 'FAILED'
+}

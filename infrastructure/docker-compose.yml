@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: viberhub-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - api
+    networks:
+      - viberhub-network
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: viberhub-web
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - API_INTERNAL_URL=http://api:4000
+    depends_on:
+      - api
+    networks:
+      - viberhub-network
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: viberhub-api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-viberhub}:${POSTGRES_PASSWORD:-viberhub_password}@postgres:5432/${POSTGRES_DB:-viberhub}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CSRF_SECRET=${CSRF_SECRET}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=${S3_BUCKET:-viber-hub-private}
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - viberhub-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: viberhub-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-viberhub}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-viberhub_password}
+      - POSTGRES_DB=${POSTGRES_DB:-viberhub}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-viberhub} -d ${POSTGRES_DB:-viberhub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viberhub-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: viberhub-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - viberhub-network
+
+  minio:
+    image: minio/minio:RELEASE.2024-03-05T04-48-44Z
+    container_name: viberhub-minio
+    restart: unless-stopped
+    command: server /data
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    networks:
+      - viberhub-network
+
+networks:
+  viberhub-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
