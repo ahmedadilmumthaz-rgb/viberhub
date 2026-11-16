@@ -13,7 +13,9 @@ import {
   Tag as TagIcon,
   Archive,
   Edit2,
-  CheckCircle2
+  CheckCircle2,
+  GitMerge,
+  AlertTriangle
 } from 'lucide-react';
 import { AppShell } from '../../../components/AppShell';
 import { Badge } from '../../../components/Badge';
@@ -35,6 +37,14 @@ export default function ContactDetailPage() {
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>(ConsentStatus.GRANTED);
   const [consentPurpose, setConsentPurpose] = useState('');
   const [consentEvidence, setConsentEvidence] = useState('');
+
+  // Contact merge modal
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [candidateContacts, setCandidateContacts] = useState<any[]>([]);
+  const [targetContactId, setTargetContactId] = useState('');
+  const [mergeRole, setMergeRole] = useState<'keep_current' | 'keep_target'>('keep_current');
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const fetchContact = async () => {
     try {
@@ -71,6 +81,53 @@ export default function ContactDetailPage() {
       fetchContact();
     } catch (err: any) {
       alert(err.message || 'Failed to update consent');
+    }
+  };
+
+  const openMergeModal = async () => {
+    setIsMergeModalOpen(true);
+    setMergeError(null);
+    try {
+      const res = await apiClient('/contacts?limit=100');
+      const others = (res.data || []).filter((c: any) => c.id !== contactId);
+      setCandidateContacts(others);
+      if (others.length > 0 && !targetContactId) {
+        setTargetContactId(others[0].id);
+      }
+    } catch (err: any) {
+      setMergeError(err.message || 'Failed to load contacts for merge');
+    }
+  };
+
+  const handleMergeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetContactId) {
+      setMergeError('Please select a contact to merge with.');
+      return;
+    }
+
+    setMergeLoading(true);
+    setMergeError(null);
+
+    const primaryContactId = mergeRole === 'keep_current' ? contactId : targetContactId;
+    const duplicateContactId = mergeRole === 'keep_current' ? targetContactId : contactId;
+
+    try {
+      await apiClient('/contacts/merge', {
+        method: 'POST',
+        body: JSON.stringify({ primaryContactId, duplicateContactId })
+      });
+      setIsMergeModalOpen(false);
+
+      if (mergeRole === 'keep_current') {
+        fetchContact();
+      } else {
+        router.push(`/contacts/${targetContactId}`);
+      }
+    } catch (err: any) {
+      setMergeError(err.message || 'Failed to merge contacts');
+    } finally {
+      setMergeLoading(false);
     }
   };
 
@@ -131,6 +188,13 @@ export default function ContactDetailPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={openMergeModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+              >
+                <GitMerge className="w-3.5 h-3.5 text-violet-600" />
+                <span>Merge Duplicate</span>
+              </button>
               <button
                 onClick={() => setIsConsentModalOpen(true)}
                 className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
@@ -342,6 +406,111 @@ export default function ContactDetailPage() {
                 className="px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700"
               >
                 Save Consent Record
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Contact Merge Modal */}
+        <Modal
+          isOpen={isMergeModalOpen}
+          onClose={() => setIsMergeModalOpen(false)}
+          title="Merge Contact Records"
+        >
+          <form onSubmit={handleMergeSubmit} className="space-y-4">
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Irreversible Consolidation</p>
+                <p className="mt-0.5">
+                  Merging will combine tags, reassign destinations and consent history, and archive the duplicate contact record with an audit trail.
+                </p>
+              </div>
+            </div>
+
+            {mergeError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">
+                {mergeError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Select Merge Partner
+              </label>
+              {candidateContacts.length === 0 ? (
+                <p className="text-xs text-slate-400">No other active contacts found in this workspace.</p>
+              ) : (
+                <select
+                  value={targetContactId}
+                  onChange={(e) => setTargetContactId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600"
+                >
+                  {candidateContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName} ({c.phoneE164}){c.organization ? ` - ${c.organization}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Primary Record to Keep Active
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="mergeRole"
+                    checked={mergeRole === 'keep_current'}
+                    onChange={() => setMergeRole('keep_current')}
+                    className="mt-0.5 text-violet-600 focus:ring-violet-500"
+                  />
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">
+                      Keep {contact.displayName} as Primary
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      The selected partner contact will be merged into this contact and archived.
+                    </span>
+                  </div>
+                </label>
+                <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="mergeRole"
+                    checked={mergeRole === 'keep_target'}
+                    onChange={() => setMergeRole('keep_target')}
+                    className="mt-0.5 text-violet-600 focus:ring-violet-500"
+                  />
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">
+                      Keep Selected Partner as Primary
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      This contact ({contact.displayName}) will be merged into the selected contact and archived.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsMergeModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={mergeLoading || !targetContactId}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50"
+              >
+                {mergeLoading ? 'Merging...' : 'Confirm and Merge Contacts'}
               </button>
             </div>
           </form>

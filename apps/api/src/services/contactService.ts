@@ -298,4 +298,86 @@ export class ContactService {
     db.data.consentRecords.set(consentId, record);
     return record;
   }
+
+  static async mergeContacts(
+    workspaceId: string,
+    primaryContactId: string,
+    duplicateContactId: string,
+    actorId: string
+  ) {
+    if (primaryContactId === duplicateContactId) {
+      const err: any = new Error('Cannot merge a contact into itself');
+      err.statusCode = 400;
+      err.code = 'INVALID_MERGE_TARGET';
+      throw err;
+    }
+
+    const primary = db.data.contacts.get(primaryContactId);
+    const duplicate = db.data.contacts.get(duplicateContactId);
+
+    if (!primary || primary.workspaceId !== workspaceId || primary.archivedAt) {
+      const err: any = new Error('Primary contact not found or archived');
+      err.statusCode = 404;
+      err.code = 'PRIMARY_NOT_FOUND';
+      throw err;
+    }
+
+    if (!duplicate || duplicate.workspaceId !== workspaceId || duplicate.archivedAt) {
+      const err: any = new Error('Duplicate contact not found or archived');
+      err.statusCode = 404;
+      err.code = 'DUPLICATE_NOT_FOUND';
+      throw err;
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Merge missing fields into primary
+    if (!primary.email && duplicate.email) primary.email = duplicate.email;
+    if (!primary.organization && duplicate.organization) primary.organization = duplicate.organization;
+    if (duplicate.notes) {
+      primary.notes = primary.notes
+        ? `${primary.notes}\n[Merged Note]: ${duplicate.notes}`
+        : duplicate.notes;
+    }
+    primary.updatedAt = now;
+
+    // 2. Transfer tags from duplicate to primary
+    const duplicateTags = Array.from(db.data.contactTags.values())
+      .filter((ct) => ct.contactId === duplicateContactId)
+      .map((ct) => ct.tagId);
+
+    for (const tagId of duplicateTags) {
+      const key = `${primaryContactId}_${tagId}`;
+      if (!db.data.contactTags.has(key)) {
+        db.data.contactTags.set(key, { contactId: primaryContactId, tagId });
+      }
+    }
+
+    // 3. Re-assign destinations pointing to duplicate
+    for (const dest of db.data.destinations.values()) {
+      if (dest.contactId === duplicateContactId) {
+        dest.contactId = primaryContactId;
+      }
+    }
+
+    // 4. Re-assign consent records
+    for (const consent of db.data.consentRecords.values()) {
+      if (consent.contactId === duplicateContactId) {
+        consent.contactId = primaryContactId;
+      }
+    }
+
+    // 5. Re-assign campaign items
+    for (const item of db.data.campaignItems.values()) {
+      if (item.contactId === duplicateContactId) {
+        item.contactId = primaryContactId;
+      }
+    }
+
+    // 6. Archive duplicate contact
+    duplicate.archivedAt = now;
+    duplicate.notes = `[ARCHIVED - Merged into contact ${primaryContactId} by ${actorId}] ${duplicate.notes || ''}`;
+
+    return this.getContactById(workspaceId, primaryContactId);
+  }
 }

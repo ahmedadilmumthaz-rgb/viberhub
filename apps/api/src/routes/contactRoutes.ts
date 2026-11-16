@@ -202,4 +202,33 @@ router.post('/:id/consent', requireEditorOrAbove, async (req: AuthenticatedReque
   }
 });
 
+router.post('/merge', requireEditorOrAbove, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const { primaryContactId, duplicateContactId } = req.body;
+    if (!primaryContactId || !duplicateContactId) {
+      return res.status(400).json({
+        error: { code: 'INVALID_INPUT', message: 'Both primaryContactId and duplicateContactId are required' }
+      });
+    }
+
+    const merged = await ContactService.mergeContacts(
+      req.workspaceId!,
+      primaryContactId,
+      duplicateContactId,
+      req.userId!
+    );
+
+    logActivityEvent(req, 'CONTACT_MERGED', 'contact', primaryContactId, {
+      mergedContactId: duplicateContactId
+    });
+    logAuditEvent(req, 'CONTACT_MERGED', 'contact', primaryContactId, {
+      mergedContactId: duplicateContactId
+    });
+
+    res.json(successEnvelope(merged));
+  } catch (err) {
+    next(err);
+  }
+});
+
 export const contactRoutes = router;

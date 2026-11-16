@@ -302,22 +302,34 @@ export default function CampaignDetailPage() {
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                       Prepared Message Content
                     </span>
-                    <button
-                      onClick={() => handleCopyText(item.id, item.body)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition shadow-sm"
-                    >
-                      {copiedItemId === item.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-600">Copied to Clipboard</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Copy Text</span>
-                        </>
+                    <div className="flex items-center gap-2">
+                      {item.contact?.phoneE164 && (
+                        <a
+                          href={`viber://chat?number=${encodeURIComponent(item.contact.phoneE164)}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 text-xs font-semibold transition shadow-sm"
+                          title="Open official Viber client directly to this chat"
+                        >
+                          <Send className="w-3.5 h-3.5 text-violet-600" />
+                          <span>Open in Viber</span>
+                        </a>
                       )}
-                    </button>
+                      <button
+                        onClick={() => handleCopyText(item.id, item.body)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition shadow-sm"
+                      >
+                        {copiedItemId === item.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-600">Copied to Clipboard</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Copy Text</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">

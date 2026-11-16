@@ -15,7 +15,8 @@ import {
   Archive,
   Phone,
   Mail,
-  Building
+  Building,
+  GitMerge
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { Badge } from '../../components/Badge';
@@ -47,6 +48,13 @@ export default function ContactsPage() {
     consentPurpose: 'Direct customer communication'
   });
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Merge Contacts Modal
+  const [isMergeOpen, setIsMergeOpen] = useState(false);
+  const [primaryMergeId, setPrimaryMergeId] = useState('');
+  const [duplicateMergeId, setDuplicateMergeId] = useState('');
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
 
   // CSV Import Modal
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -137,6 +145,37 @@ export default function ContactsPage() {
     }
   };
 
+  const handleMergeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!primaryMergeId || !duplicateMergeId) {
+      setMergeError('Please select both a primary contact and a duplicate contact.');
+      return;
+    }
+    if (primaryMergeId === duplicateMergeId) {
+      setMergeError('Primary and duplicate contacts cannot be the same.');
+      return;
+    }
+    setMergeLoading(true);
+    setMergeError(null);
+    try {
+      await apiClient('/contacts/merge', {
+        method: 'POST',
+        body: JSON.stringify({
+          primaryContactId: primaryMergeId,
+          duplicateContactId: duplicateMergeId
+        })
+      });
+      setIsMergeOpen(false);
+      setPrimaryMergeId('');
+      setDuplicateMergeId('');
+      fetchContacts();
+    } catch (err: any) {
+      setMergeError(err.message || 'Failed to merge contacts');
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!csvContent) return;
@@ -222,6 +261,20 @@ export default function ContactsPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setIsMergeOpen(true);
+                setMergeError(null);
+                if (contacts.length >= 2) {
+                  setPrimaryMergeId(contacts[0].id);
+                  setDuplicateMergeId(contacts[1].id);
+                }
+              }}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            >
+              <GitMerge className="w-3.5 h-3.5 text-violet-600" />
+              <span>Merge Contacts</span>
+            </button>
             <button
               onClick={() => setIsImportOpen(true)}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-sm"
@@ -674,6 +727,86 @@ export default function ContactsPage() {
               </div>
             )}
           </div>
+        </Modal>
+
+        {/* Merge Contacts Modal */}
+        <Modal
+          isOpen={isMergeOpen}
+          onClose={() => setIsMergeOpen(false)}
+          title="Merge Duplicate Contacts"
+        >
+          <form onSubmit={handleMergeSubmit} className="space-y-4">
+            <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 flex gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Irreversible Consolidation</p>
+                <p className="mt-0.5">
+                  The primary contact will receive all tags, destinations, consent records, and notes from the duplicate. The duplicate will be archived with an audit trail.
+                </p>
+              </div>
+            </div>
+
+            {mergeError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">
+                {mergeError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Primary Contact (Record to Keep)
+              </label>
+              <select
+                value={primaryMergeId}
+                onChange={(e) => setPrimaryMergeId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600"
+              >
+                <option value="">Select primary contact...</option>
+                {contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.displayName} ({c.phoneE164}){c.organization ? ` - ${c.organization}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Duplicate Contact (Record to Merge & Archive)
+              </label>
+              <select
+                value={duplicateMergeId}
+                onChange={(e) => setDuplicateMergeId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600"
+              >
+                <option value="">Select duplicate contact...</option>
+                {contacts
+                  .filter((c) => c.id !== primaryMergeId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName} ({c.phoneE164}){c.organization ? ` - ${c.organization}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsMergeOpen(false)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={mergeLoading || !primaryMergeId || !duplicateMergeId}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50"
+              >
+                {mergeLoading ? 'Merging...' : 'Execute Merge'}
+              </button>
+            </div>
+          </form>
         </Modal>
       </div>
     </AppShell>
