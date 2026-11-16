@@ -23,6 +23,33 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
     token = req.cookies.vh_session;
   }
 
+  // Check companion device pairing token (via X-Device-Token header or Bearer vh_dev_...)
+  const deviceToken =
+    (req.headers['x-device-token'] as string) ||
+    (token && token.startsWith('vh_dev_') ? token : undefined);
+
+  if (deviceToken) {
+    const device = Array.from(db.data.devices.values()).find(
+      (d) => d.pairingToken === deviceToken && !d.revokedAt
+    );
+    if (device) {
+      const user = db.data.users.get(device.userId);
+      if (user && user.status === AccountStatus.ACTIVE) {
+        req.user = {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          status: user.status,
+          mfaEnabled: user.mfaEnabled,
+          createdAt: user.createdAt
+        };
+        req.userId = user.id;
+        req.workspaceId = device.workspaceId;
+        return next();
+      }
+    }
+  }
+
   if (!token) {
     return res.status(401).json({
       error: {

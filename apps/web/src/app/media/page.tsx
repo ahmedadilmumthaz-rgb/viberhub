@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Image,
   Upload,
@@ -10,7 +10,13 @@ import {
   FileCheck,
   HardDrive,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Search,
+  Filter,
+  Copy,
+  Check,
+  FolderOpen,
+  Layers
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { apiClient } from '../../lib/api';
@@ -21,6 +27,9 @@ export default function MediaPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'IMAGE' | 'PDF' | 'DOCUMENT'>('ALL');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchAttachments = async () => {
     setLoading(true);
@@ -59,17 +68,28 @@ export default function MediaPage() {
       setError(err.message || 'Upload failed');
     } finally {
       setUploading(false);
+      // Reset input value so same file can be re-uploaded if needed
+      e.target.value = '';
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this attachment?')) return;
+    if (!confirm('Are you sure you want to delete this media attachment?')) return;
     try {
       await apiClient(`/attachments/${id}`, { method: 'DELETE' });
       fetchAttachments();
     } catch (err: any) {
       alert(err.message || 'Failed to delete');
     }
+  };
+
+  const handleCopyLink = (file: any) => {
+    const url = file.downloadUrl.startsWith('http')
+      ? file.downloadUrl
+      : `${window.location.origin}${file.downloadUrl}`;
+    navigator.clipboard.writeText(url);
+    setCopiedId(file.id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const getFileIcon = (mime: string) => {
@@ -81,6 +101,31 @@ export default function MediaPage() {
     }
     return <FileCheck className="w-5 h-5 text-sky-600" />;
   };
+
+  // Filter attachments by search and category
+  const filteredAttachments = useMemo(() => {
+    return attachments.filter((file) => {
+      const matchesSearch = file.originalName.toLowerCase().includes(search.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (typeFilter === 'IMAGE') return file.mimeType.startsWith('image/');
+      if (typeFilter === 'PDF') return file.mimeType.includes('pdf');
+      if (typeFilter === 'DOCUMENT') {
+        return (
+          file.mimeType.includes('word') ||
+          file.mimeType.includes('document') ||
+          file.mimeType.includes('sheet') ||
+          file.mimeType.includes('text') ||
+          file.mimeType.includes('csv')
+        );
+      }
+      return true;
+    });
+  }, [attachments, search, typeFilter]);
+
+  const totalStorageBytes = useMemo(() => {
+    return attachments.reduce((acc, file) => acc + (file.sizeBytes || 0), 0);
+  }, [attachments]);
 
   return (
     <AppShell>
@@ -114,13 +159,69 @@ export default function MediaPage() {
           </div>
         )}
 
-        {/* Security boundary card */}
-        <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-900">Protected Object Storage: </span>
-            All files are stored in private MinIO/S3 buckets with random cryptographic storage keys.
-            Download URLs are short-lived and authenticated. Raw bucket endpoints are never publicly exposed.
+        {/* Storage stats overview */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-violet-50 text-violet-600 border border-violet-100">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Files</p>
+              <p className="text-xl font-bold text-slate-900 mt-0.5">{attachments.length}</p>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-sky-50 text-sky-600 border border-sky-100">
+              <HardDrive className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Storage Consumed</p>
+              <p className="text-xl font-bold text-slate-900 mt-0.5">{formatBytes(totalStorageBytes)}</p>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Storage Boundary</p>
+              <p className="text-xs font-semibold text-emerald-700 mt-1">Private Authenticated S3/MinIO</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="relative w-full md:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search media files by name..."
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto">
+            <span className="text-xs font-semibold text-slate-500 mr-2 flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5" /> Type:
+            </span>
+            {(['ALL', 'IMAGE', 'PDF', 'DOCUMENT'] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setTypeFilter(filter)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                  typeFilter === filter
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {filter === 'ALL' ? 'All Files' : filter === 'IMAGE' ? 'Images' : filter === 'PDF' ? 'PDFs' : 'Documents'}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -128,12 +229,13 @@ export default function MediaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {loading ? (
             <div className="col-span-3 py-16 text-center text-xs text-slate-400">Loading attachments...</div>
-          ) : attachments.length === 0 ? (
-            <div className="col-span-3 py-16 text-center text-xs text-slate-400">
-              No media files uploaded yet.
+          ) : filteredAttachments.length === 0 ? (
+            <div className="col-span-3 py-16 text-center text-xs text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
+              <FolderOpen className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+              {attachments.length === 0 ? 'No media files uploaded yet.' : 'No media files matching the current filter.'}
             </div>
           ) : (
-            attachments.map((file) => (
+            filteredAttachments.map((file) => (
               <div
                 key={file.id}
                 className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow transition flex flex-col justify-between"
@@ -151,7 +253,7 @@ export default function MediaPage() {
                   <h3 className="font-bold text-slate-900 text-xs truncate" title={file.originalName}>
                     {file.originalName}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                  <p className="text-[11px] text-slate-400 mt-0.5 truncate font-mono">
                     {file.mimeType}
                   </p>
                 </div>
@@ -161,6 +263,17 @@ export default function MediaPage() {
                     {formatDateTime(file.createdAt)}
                   </span>
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleCopyLink(file)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-violet-600 hover:bg-slate-100 transition relative"
+                      title="Copy download link"
+                    >
+                      {copiedId === file.id ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
                     <a
                       href={file.downloadUrl}
                       download={file.originalName}

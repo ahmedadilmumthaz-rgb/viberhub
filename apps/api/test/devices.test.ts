@@ -125,4 +125,55 @@ describe('Companion Device Registry & Handoff Integration', () => {
 
     assert.ok(!activeDevices.some((d) => d.id === id), 'Revoked device must not appear in active devices');
   });
+
+  it('authenticates companion requests via X-Device-Token or Bearer vh_dev_ token', async () => {
+    const { authMiddleware } = await import('../src/middleware/auth.js');
+    const { workspaceMiddleware } = await import('../src/middleware/workspace.js');
+
+    const deviceId = uuidv4();
+    const token = `vh_dev_${uuidv4().replace(/-/g, '')}`;
+
+    db.data.devices.set(deviceId, {
+      id: deviceId,
+      workspaceId,
+      userId,
+      deviceName: 'Companion Desktop App',
+      platform: 'desktop',
+      pairingToken: token,
+      clientVersion: '1.0.0',
+      pairedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      revokedAt: null
+    });
+
+    const mockReq = {
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      query: {}
+    } as any;
+
+    let nextCount = 0;
+    const mockRes = {
+      status: () => mockRes,
+      json: () => mockRes
+    } as any;
+
+    authMiddleware(mockReq, mockRes, () => {
+      nextCount++;
+    });
+
+    assert.strictEqual(nextCount, 1, 'authMiddleware should call next()');
+    assert.strictEqual(mockReq.userId, userId);
+    assert.strictEqual(mockReq.workspaceId, workspaceId);
+
+    // Now test workspaceMiddleware with pre-resolved workspaceId
+    let workspaceNext = 0;
+    workspaceMiddleware(mockReq, mockRes, () => {
+      workspaceNext++;
+    });
+
+    assert.strictEqual(workspaceNext, 1, 'workspaceMiddleware should call next()');
+    assert.strictEqual(mockReq.workspaceId, workspaceId);
+  });
 });

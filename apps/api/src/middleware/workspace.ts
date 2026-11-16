@@ -14,8 +14,8 @@ export function workspaceMiddleware(
     });
   }
 
-  // Get workspaceId from header or query param
-  let workspaceId = (req.headers['x-workspace-id'] as string) || (req.query.workspaceId as string);
+  // Get workspaceId from header or query param or pre-set by device token auth
+  let workspaceId = (req.headers['x-workspace-id'] as string) || (req.query.workspaceId as string) || req.workspaceId;
 
   // If not explicitly provided, find the user's first active workspace membership
   if (!workspaceId) {
