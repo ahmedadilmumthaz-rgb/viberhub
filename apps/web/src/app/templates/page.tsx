@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText,
   Plus,
@@ -10,7 +10,9 @@ import {
   Search,
   Sparkles,
   Eye,
-  Trash2
+  Trash2,
+  CopyPlus,
+  Filter
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { Badge } from '../../components/Badge';
@@ -23,6 +25,7 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Template Modal
@@ -91,17 +94,53 @@ export default function TemplatesPage() {
     }
   };
 
+  const handleDuplicate = (template: any) => {
+    setForm({
+      name: `${template.name} (Copy)`,
+      category: template.category || 'announcement',
+      body: template.body
+    });
+    setPreviewResult(null);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to archive template "${name}"?`)) return;
+    try {
+      await apiClient(`/templates/${id}`, { method: 'DELETE' });
+      fetchTemplates();
+    } catch (err: any) {
+      alert(err.message || 'Failed to archive template');
+    }
+  };
+
   const handleCopyText = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filteredTemplates = templates.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.body.toLowerCase().includes(search.toLowerCase())
-  );
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    templates.forEach((t) => {
+      if (t.category) set.add(t.category);
+    });
+    return Array.from(set);
+  }, [templates]);
+
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((t) => {
+      const matchesSearch =
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        t.body.toLowerCase().includes(search.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (selectedCategory !== 'ALL' && t.category !== selectedCategory) {
+        return false;
+      }
+      return true;
+    });
+  }, [templates, search, selectedCategory]);
 
   return (
     <AppShell>
@@ -128,27 +167,62 @@ export default function TemplatesPage() {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        {/* Search & Category Filter */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="relative w-full md:w-80">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search templates..."
+              placeholder="Search templates by name or content..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-600"
             />
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Allowed Variables:</span>
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto">
+            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5" /> Category:
+            </span>
+            <button
+              onClick={() => setSelectedCategory('ALL')}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                selectedCategory === 'ALL'
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All ({templates.length})
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition capitalize ${
+                  selectedCategory === cat
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Allowed Variables Info Bar */}
+        <div className="p-3.5 rounded-xl bg-violet-50/60 border border-violet-100 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-violet-900">Allowed Variables:</span>
             {ALLOWED_TEMPLATE_VARIABLES.map((v) => (
-              <code key={v} className="bg-slate-100 text-violet-700 px-1.5 py-0.5 rounded font-mono text-[11px]">
+              <code key={v} className="bg-white text-violet-700 px-2 py-0.5 rounded border border-violet-200 font-mono text-[11px]">
                 {`{{${v}}}`}
               </code>
             ))}
           </div>
+          <span className="text-[11px] text-violet-600 hidden sm:inline">
+            Variables are safely sanitized to prevent XSS.
+          </span>
         </div>
 
         {/* Templates Grid */}
@@ -156,19 +230,19 @@ export default function TemplatesPage() {
           {loading ? (
             <div className="col-span-2 py-16 text-center text-xs text-slate-400">Loading templates...</div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="col-span-2 py-16 text-center text-xs text-slate-400">
-              No message templates registered.
+            <div className="col-span-2 py-16 text-center text-xs text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
+              No message templates matching your criteria.
             </div>
           ) : (
             filteredTemplates.map((template) => (
               <div
                 key={template.id}
-                className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between"
+                className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between hover:border-slate-300 transition"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="font-bold text-slate-900 text-base">{template.name}</span>
-                    <Badge variant="neutral">{template.category}</Badge>
+                    <Badge variant="neutral">{template.category || 'General'}</Badge>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 font-mono text-xs text-slate-700 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
@@ -177,8 +251,16 @@ export default function TemplatesPage() {
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                  <span>{template.body.length} characters</span>
+                  <span className="font-mono text-[11px]">{template.body.length} characters</span>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDuplicate(template)}
+                      title="Clone as new template"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-medium transition"
+                    >
+                      <CopyPlus className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Clone</span>
+                    </button>
                     <button
                       onClick={() => handleCopyText(template.id, template.body)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition"
@@ -194,6 +276,13 @@ export default function TemplatesPage() {
                           <span>Copy Body</span>
                         </>
                       )}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(template.id, template.name)}
+                      title="Archive template"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
