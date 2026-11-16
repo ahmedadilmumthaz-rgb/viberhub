@@ -143,12 +143,13 @@ export class CampaignService {
     if (data.items && data.items.length > 0) {
       for (const item of data.items) {
         const itemId = uuidv4();
+        const dest = db.data.destinations.get(item.destinationId);
         const campaignItem = {
           id: itemId,
           workspaceId,
           campaignId,
           destinationId: item.destinationId,
-          contactId: item.contactId || null,
+          contactId: item.contactId || dest?.contactId || null,
           body: item.body,
           status: CampaignItemStatus.PREPARED,
           dueAt: item.dueAt || campaign.plannedAt,
@@ -299,5 +300,60 @@ export class CampaignService {
     campaign.archivedAt = new Date().toISOString();
 
     return { success: true, id: campaignId };
+  }
+
+  static async getPendingHandoffItems(workspaceId: string) {
+    const approvedCampaigns = Array.from(db.data.campaigns.values()).filter(
+      (c) => c.workspaceId === workspaceId && c.status === CampaignStatus.APPROVED && !c.archivedAt
+    );
+    const campaignMap = new Map(approvedCampaigns.map((c) => [c.id, c]));
+
+    const items = Array.from(db.data.campaignItems.values()).filter(
+      (ci) => campaignMap.has(ci.campaignId) && ci.status === CampaignItemStatus.PREPARED
+    );
+
+    return items.map((ci) => {
+      const campaign = campaignMap.get(ci.campaignId)!;
+      const destination = db.data.destinations.get(ci.destinationId);
+      const contactId = ci.contactId || destination?.contactId;
+      const contact = contactId ? db.data.contacts.get(contactId) : null;
+
+      const attachments = Array.from(db.data.campaignAttachments.values())
+        .filter((ca) => ca.campaignItemId === ci.id)
+        .map((ca) => db.data.attachments.get(ca.attachmentId))
+        .filter(Boolean)
+        .map((att) => ({
+          id: att.id,
+          originalName: att.originalName,
+          mimeType: att.mimeType,
+          sizeBytes: att.sizeBytes,
+          downloadUrl: `/api/v1/attachments/${att.id}/download`
+        }));
+
+      return {
+        id: ci.id,
+        campaignId: campaign.id,
+        campaignTitle: campaign.title,
+        plannedAt: campaign.plannedAt,
+        status: ci.status,
+        destination: destination
+          ? {
+              id: destination.id,
+              type: destination.type,
+              displayName: destination.displayName
+            }
+          : null,
+        contact: contact
+          ? {
+              id: contact.id,
+              displayName: contact.displayName,
+              phoneE164: contact.phoneE164
+            }
+          : null,
+        body: ci.body,
+        attachments,
+        viberUri: contact ? `viber://chat?number=${encodeURIComponent(contact.phoneE164)}` : 'viber://'
+      };
+    });
   }
 }

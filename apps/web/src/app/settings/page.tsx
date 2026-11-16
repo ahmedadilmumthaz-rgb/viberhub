@@ -6,11 +6,15 @@ import {
   Building2,
   PhoneCall,
   Smartphone,
+  Laptop,
   Shield,
   Plus,
   Trash2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check,
+  KeyRound
 } from 'lucide-react';
 import { AppShell } from '../../components/AppShell';
 import { Badge } from '../../components/Badge';
@@ -37,6 +41,8 @@ export default function SettingsPage() {
   const [devices, setDevices] = useState<any[]>([]);
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [newDevice, setNewDevice] = useState({ deviceName: '', platform: 'desktop' });
+  const [createdDeviceToken, setCreatedDeviceToken] = useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
 
   const loadData = async () => {
     try {
@@ -110,12 +116,16 @@ export default function SettingsPage() {
   const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient('/settings/devices', {
+      const res = await apiClient('/settings/devices', {
         method: 'POST',
         body: JSON.stringify(newDevice)
       });
       setIsAddDeviceOpen(false);
       setNewDevice({ deviceName: '', platform: 'desktop' });
+      if (res.data?.pairingToken) {
+        setCreatedDeviceToken(res.data.pairingToken);
+        setTokenCopied(false);
+      }
       loadData();
     } catch (err: any) {
       alert(err.message || 'Failed to pair device');
@@ -323,32 +333,49 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {devices.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400 border border-dashed rounded-xl">
-                  No companion devices paired yet.
+                  No companion devices paired yet. Click "Pair Companion Device" to register a Desktop or Android companion.
                 </div>
               ) : (
-                devices.map((dev) => (
-                  <div
-                    key={dev.id}
-                    className="p-4 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900">{dev.deviceName}</span>
-                        <Badge variant="neutral">{dev.platform}</Badge>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-0.5 block">
-                        Paired on {formatDate(dev.pairedAt)}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => handleRevokeDevice(dev.id)}
-                      className="px-3 py-1 rounded text-rose-600 hover:bg-rose-50 text-xs font-semibold"
+                devices.map((dev) => {
+                  const isDesktop = dev.platform === 'desktop';
+                  return (
+                    <div
+                      key={dev.id}
+                      className="p-4 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs hover:border-slate-300 transition"
                     >
-                      Revoke
-                    </button>
-                  </div>
-                ))
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                          {isDesktop ? <Laptop className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{dev.deviceName}</span>
+                            <Badge variant="neutral">{dev.platform}</Badge>
+                            {dev.clientVersion && (
+                              <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                v{dev.clientVersion}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                            <span>Paired: {formatDate(dev.pairedAt)}</span>
+                            <span>•</span>
+                            <span className="font-mono text-slate-500">
+                              {dev.pairingToken ? `Token: ${dev.pairingToken.slice(0, 14)}...` : 'Active'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleRevokeDevice(dev.id)}
+                        className="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition"
+                      >
+                        Revoke Access
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -504,6 +531,80 @@ export default function SettingsPage() {
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* Companion Device Pairing Token Modal */}
+        <Modal
+          isOpen={!!createdDeviceToken}
+          onClose={() => setCreatedDeviceToken(null)}
+          title="Companion Device Paired Successfully"
+          description="Copy this authorization pairing token into your companion app configuration."
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Device Authorized</p>
+                <p className="mt-0.5">
+                  Save this secret pairing token now. It will authenticate the companion app with this workspace.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Companion Pairing Token
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={createdDeviceToken || ''}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs bg-slate-50 text-slate-900 select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (createdDeviceToken) {
+                      navigator.clipboard.writeText(createdDeviceToken);
+                      setTokenCopied(true);
+                      setTimeout(() => setTokenCopied(false), 2000);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shrink-0"
+                >
+                  {tokenCopied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-600">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+              <span className="font-semibold text-slate-700 block">Desktop Companion Quickstart:</span>
+              <code className="font-mono text-[11px] block text-violet-700 select-all">
+                VIBERHUB_SERVER_URL=http://localhost:3000 VIBERHUB_DEVICE_TOKEN={createdDeviceToken} npm run start --workspace=@viberhub/desktop
+              </code>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCreatedDeviceToken(null)}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </Modal>
       </div>
     </AppShell>

@@ -36,6 +36,7 @@ All responses follow standard envelopes:
 - `GET /contacts/:id`: Contact details, tags, and consent history
 - `PATCH /contacts/:id`: Update contact fields
 - `DELETE /contacts/:id`: Archive contact
+- `POST /contacts/merge`: Merge duplicate contact into primary contact (consolidates tags, notes, destinations, consent, items)
 - `POST /contacts/import`: Upload and process CSV contacts with column mapping and duplicate policy
 - `GET /contacts/export`: Export authorized contact data as CSV
 - `POST /contacts/:id/consent`: Record consent or opt-out withdrawal
@@ -63,7 +64,7 @@ All responses follow standard envelopes:
 
 ### Campaigns (`/campaigns`)
 - `GET /campaigns`: List campaigns by status
-- `POST /campaigns`: Create campaign with items
+- `POST /campaigns`: Create campaign with items (supports single, multi-select, or tag segmentation)
 - `GET /campaigns/:id`: Campaign detail, workflow state, items, approvals
 - `POST /campaigns/:id/submit-review`: Submit campaign for designated review
 - `POST /campaigns/:id/approve`: Approve or request revisions with notes
@@ -80,3 +81,15 @@ All responses follow standard envelopes:
 
 ### Activity & Audit (`/activity`)
 - `GET /activity`: List activity feed or security audit logs (`?type=audit`)
+
+### Settings & Companions (`/settings`)
+- `GET /settings/workspace`: Workspace profile and configuration
+- `PATCH /settings/workspace`: Update workspace name, timezone, locale
+- `GET /settings/accounts`: List organizational Viber account profiles
+- `POST /settings/accounts`: Register organizational phone label
+- `DELETE /settings/accounts/:id`: Revoke profile label
+- `GET /settings/devices`: List active companion devices
+- `POST /settings/devices`: Pair new companion device with authorization token
+- `GET /settings/devices/pending-handoff`: Retrieve approved campaign items awaiting operator handoff
+- `POST /settings/devices/:id/ping`: Companion heartbeat and client version reporting
+- `DELETE /settings/devices/:id`: Revoke companion device authorization

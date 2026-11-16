@@ -109,8 +109,16 @@ export default function CampaignDetailPage() {
     }
   };
 
-  const handleCopyText = (itemId: string, text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyText = async (itemId: string, text: string, phoneNumber?: string) => {
+    if (typeof window !== 'undefined' && (window as any).viberHubCompanion?.handoffToViber) {
+      try {
+        await (window as any).viberHubCompanion.handoffToViber({ text, phoneNumber });
+      } catch (err) {
+        navigator.clipboard.writeText(text);
+      }
+    } else {
+      navigator.clipboard.writeText(text);
+    }
     setCopiedItemId(itemId);
     setTimeout(() => setCopiedItemId(null), 2500);
   };
@@ -314,7 +322,7 @@ export default function CampaignDetailPage() {
                         </a>
                       )}
                       <button
-                        onClick={() => handleCopyText(item.id, item.body)}
+                        onClick={() => handleCopyText(item.id, item.body, item.contact?.phoneE164)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition shadow-sm"
                       >
                         {copiedItemId === item.id ? (

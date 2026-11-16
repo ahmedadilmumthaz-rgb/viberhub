@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/rbac.js';
 import { viberAccountSchema, deviceRegisterSchema, updateWorkspaceSchema } from '@viberhub/validation';
 import { MemberRole, AccountStatus, successEnvelope } from '@viberhub/shared';
 import { logAuditEvent } from '../middleware/audit.js';
+import { CampaignService } from '../services/campaignService.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -82,7 +83,7 @@ router.delete('/accounts/:id', requireRole(MemberRole.ADMINISTRATOR), (req: Auth
   res.json(successEnvelope({ success: true, id: account.id }));
 });
 
-// Device registry (for companion device pairing and revocation)
+// Device registry (for companion device pairing, heartbeats, and handoff tasks)
 router.get('/devices', (req: AuthenticatedRequest, res: Response) => {
   const devices = Array.from(db.data.devices.values()).filter(
     (d) => d.workspaceId === req.workspaceId && !d.revokedAt
@@ -90,10 +91,20 @@ router.get('/devices', (req: AuthenticatedRequest, res: Response) => {
   res.json(successEnvelope(devices));
 });
 
+router.get('/devices/pending-handoff', async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const items = await CampaignService.getPendingHandoffItems(req.workspaceId!);
+    res.json(successEnvelope(items));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/devices', (req: AuthenticatedRequest, res: Response, next) => {
   try {
     const validated = deviceRegisterSchema.parse(req.body);
     const id = uuidv4();
+    const pairingToken = `vh_dev_${uuidv4().replace(/-/g, '')}`;
     const now = new Date().toISOString();
 
     const device = {
@@ -102,6 +113,8 @@ router.post('/devices', (req: AuthenticatedRequest, res: Response, next) => {
       userId: req.userId!,
       deviceName: validated.deviceName.trim(),
       platform: validated.platform,
+      pairingToken,
+      clientVersion: req.body.clientVersion || '1.0.0',
       pairedAt: now,
       lastSeenAt: now,
       revokedAt: null
@@ -114,6 +127,21 @@ router.post('/devices', (req: AuthenticatedRequest, res: Response, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.post('/devices/:id/ping', (req: AuthenticatedRequest, res: Response) => {
+  const device = db.data.devices.get(req.params.id);
+  if (!device || device.workspaceId !== req.workspaceId || device.revokedAt) {
+    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Device not found or revoked' } });
+  }
+
+  const now = new Date().toISOString();
+  device.lastSeenAt = now;
+  if (req.body.clientVersion) {
+    device.clientVersion = req.body.clientVersion;
+  }
+
+  res.json(successEnvelope({ success: true, id: device.id, lastSeenAt: now }));
 });
 
 router.delete('/devices/:id', (req: AuthenticatedRequest, res: Response) => {
