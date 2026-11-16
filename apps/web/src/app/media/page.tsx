@@ -187,7 +187,7 @@ export default function MediaPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Storage Boundary</p>
-              <p className="text-xs font-semibold text-emerald-700 mt-1">Private Authenticated S3/MinIO</p>
+              <p className="text-xs font-semibold text-emerald-700 mt-1">R2 Storage (mvcdn.cc)</p>
             </div>
           </div>
         </div>

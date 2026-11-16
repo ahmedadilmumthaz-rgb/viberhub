@@ -16,12 +16,16 @@ export const config = {
   passwordResetSecret: process.env.PASSWORD_RESET_SECRET || 'viberhub-pwd-secret-min-32-chars-long!',
   maxUploadBytes: parseInt(process.env.MAX_UPLOAD_BYTES || '20971520', 10), // 20 MB default
   localStoragePath: process.env.LOCAL_STORAGE_PATH || path.resolve(process.cwd(), 'uploads'),
-  s3: {
-    endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-    region: process.env.S3_REGION || 'us-east-1',
-    bucket: process.env.S3_BUCKET || 'viber-hub-private',
-    accessKey: process.env.S3_ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.S3_SECRET_KEY || 'minioadmin',
-    useSSL: process.env.S3_USE_SSL === 'true'
+  storage: {
+    provider: process.env.STORAGE_PROVIDER || 'r2storage',
+    r2: {
+      endpoint: process.env.R2_ENDPOINT || 'https://panel.mvcdn.cc/s3',
+      adminEndpoint: process.env.R2_ADMIN_ENDPOINT || 'https://panel.mvcdn.cc/api/admin',
+      bucket: process.env.R2_BUCKET || 'viberhub',
+      accessKeyId: process.env.R2_ACCESS_KEY_ID || 'r2_f8ebdadacbe468df3403bc4a',
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '18d35935c59172763d955fc37b12fe3cd15af768b02f04f3',
+      adminSecret: process.env.R2_ADMIN_SECRET || '3062763f681b116f7d20da1f47ce84e9aae649d66aef3515d9d58cc37766a875',
+      publicCdnBase: process.env.R2_PUBLIC_CDN_BASE || 'https://cdn.mvcdn.cc'
+    }
   }
 };

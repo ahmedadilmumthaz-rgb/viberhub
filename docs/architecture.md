@@ -22,7 +22,7 @@ viberhub/
 │   ├── schema.prisma           # Relational PostgreSQL schema with UUIDs & indexes
 │   └── seed.ts                 # Seeding script
 ├── infrastructure/
-│   ├── docker-compose.yml      # Multi-container orchestration (nginx, web, api, db, redis, minio)
+│   ├── docker-compose.yml      # Multi-container orchestration (nginx, web, api, db, redis)
 │   ├── nginx/nginx.conf        # TLS termination, security headers, upload limit
 │   └── backups/backup.sh       # Automated database backup script
 └── docs/                       # Technical guides
@@ -34,6 +34,6 @@ viberhub/
 3. **Contacts & Consent**: E.164 normalization, duplicate protection, consent tracking (`GRANTED`, `WITHDRAWN`, `UNKNOWN`), CSV import/export.
 4. **Destinations**: Curated directory of Individuals, Groups, Communities, and Channels.
 5. **Templates & Composer**: Strict variable allowlist (`{{name}}`, `{{phone}}`, `{{company}}`, `{{date}}`) with live preview and missing-variable warnings.
-6. **Media Library**: Private MinIO/S3 attachment storage with MIME validation, signature checks, size caps, and authenticated downloads.
+6. **Media Library**: Private R2 Storage (hosted on mvcdn.cc) with MIME validation, signature checks, size caps, and authenticated presigned downloads.
 7. **Campaign Lifecycle**: Enforced state machine (`DRAFT -> IN_REVIEW -> APPROVED -> COMPLETED_MANUALLY`), approval audit trail, operator handoff checklist.
 8. **Observability & Audit**: Structured JSON logging, tamper-resistant audit logs, `/healthz` and `/readyz` probes.

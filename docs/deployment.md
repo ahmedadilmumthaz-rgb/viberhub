@@ -27,7 +27,7 @@ This initializes:
 - `viberhub-api`: Express REST API
 - `viberhub-postgres`: PostgreSQL database (private Docker network)
 - `viberhub-redis`: Redis cache (private Docker network)
-- `viberhub-minio`: S3-compatible private object store (private Docker network)
+- Object Storage: Hosted R2 Storage on `mvcdn.cc` with S3-compatible API and authenticated presigned URLs (no local MinIO needed)
 
 ### 3. Initialize Database Migrations & Seeds
 ```bash

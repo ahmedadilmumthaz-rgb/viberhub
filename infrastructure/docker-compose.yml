@@ -44,17 +44,18 @@ services:
       - REDIS_URL=redis://redis:6379
       - SESSION_SECRET=${SESSION_SECRET}
       - CSRF_SECRET=${CSRF_SECRET}
-      - S3_ENDPOINT=http://minio:9000
-      - S3_BUCKET=${S3_BUCKET:-viber-hub-private}
-      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
-      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - STORAGE_PROVIDER=r2storage
+      - R2_ENDPOINT=${R2_ENDPOINT:-https://panel.mvcdn.cc/s3}
+      - R2_ADMIN_ENDPOINT=${R2_ADMIN_ENDPOINT:-https://panel.mvcdn.cc/api/admin}
+      - R2_BUCKET=${R2_BUCKET:-viberhub}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-r2_f8ebdadacbe468df3403bc4a}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-18d35935c59172763d955fc37b12fe3cd15af768b02f04f3}
+      - R2_ADMIN_SECRET=${R2_ADMIN_SECRET:-3062763f681b116f7d20da1f47ce84e9aae649d66aef3515d9d58cc37766a875}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
     networks:
       - viberhub-network
 
@@ -90,19 +91,6 @@ services:
     networks:
       - viberhub-network
 
-  minio:
-    image: minio/minio:RELEASE.2024-03-05T04-48-44Z
-    container_name: viberhub-minio
-    restart: unless-stopped
-    command: server /data
-    environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
-    volumes:
-      - minio-data:/data
-    networks:
-      - viberhub-network
-
 networks:
   viberhub-network:
     driver: bridge
@@ -110,4 +98,3 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:

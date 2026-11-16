@@ -59,12 +59,33 @@ router.post('/upload', requireEditorOrAbove, uploadRateLimiter, upload.single('f
 
 router.get('/:id/download', async (req: AuthenticatedRequest, res: Response, next) => {
   try {
-    const { metadata, filePath } = await MediaService.getAttachmentFile(req.workspaceId!, req.params.id);
+    if (req.query.presigned === 'true') {
+      const presigned = await MediaService.getPresignedUrl(req.workspaceId!, req.params.id);
+      if (presigned.url.startsWith('http')) {
+        return res.redirect(presigned.url);
+      }
+    }
+
+    const result = await MediaService.getAttachmentFile(req.workspaceId!, req.params.id);
     logAuditEvent(req, 'MEDIA_DOWNLOADED', 'attachment', req.params.id);
 
-    res.setHeader('Content-Type', metadata.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(metadata.originalName)}"`);
-    res.sendFile(filePath);
+    res.setHeader('Content-Type', result.metadata.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.metadata.originalName)}"`);
+
+    if (result.filePath) {
+      res.sendFile(result.filePath);
+    } else if (result.buffer) {
+      res.send(result.buffer);
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/presigned', async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const presigned = await MediaService.getPresignedUrl(req.workspaceId!, req.params.id);
+    res.json(successEnvelope(presigned));
   } catch (err) {
     next(err);
   }

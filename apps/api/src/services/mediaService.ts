@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/store.js';
 import { config } from '../config.js';
+import { R2StorageClient } from '../storage/r2Client.js';
 
 export const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -32,7 +33,9 @@ export class MediaService {
   ) {
     // Validate size
     if (file.size > config.maxUploadBytes) {
-      const err: any = new Error(`File exceeds maximum allowed size of ${config.maxUploadBytes / (1024 * 1024)}MB`);
+      const err: any = new Error(
+        `File exceeds maximum allowed size of ${config.maxUploadBytes / (1024 * 1024)}MB`
+      );
       err.statusCode = 413;
       err.code = 'FILE_TOO_LARGE';
       throw err;
@@ -63,14 +66,23 @@ export class MediaService {
     const fileId = uuidv4();
     const storageKey = `${workspaceId}/${fileId}-${hash.slice(0, 8)}${ext}`;
 
-    // Ensure uploads folder exists
-    const uploadsDir = path.resolve(config.localStoragePath, workspaceId);
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    // 1. Upload to R2 Storage hosted on mvcdn.cc
+    const r2Uploaded = await R2StorageClient.uploadObject(storageKey, file.buffer, file.mimetype);
 
-    const filePath = path.resolve(config.localStoragePath, storageKey);
-    fs.writeFileSync(filePath, file.buffer);
+    // 2. Cache locally for immediate fast streaming
+    try {
+      const uploadsDir = path.resolve(config.localStoragePath, workspaceId);
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const filePath = path.resolve(config.localStoragePath, storageKey);
+      fs.writeFileSync(filePath, file.buffer);
+    } catch (localErr) {
+      // Non-fatal if R2 upload succeeded
+      if (!r2Uploaded) {
+        throw localErr;
+      }
+    }
 
     const now = new Date().toISOString();
     const attachment = {
@@ -81,6 +93,7 @@ export class MediaService {
       mimeType: file.mimetype,
       sizeBytes: file.size,
       checksum: hash,
+      storageProvider: 'r2storage',
       uploadedBy: uploaderId,
       createdAt: now
     };
@@ -106,6 +119,22 @@ export class MediaService {
     }));
   }
 
+  static async getPresignedUrl(workspaceId: string, id: string, expiresInSeconds: number = 3600) {
+    const attachment = db.data.attachments.get(id);
+    if (!attachment || attachment.workspaceId !== workspaceId) {
+      const err: any = new Error('Attachment not found');
+      err.statusCode = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const presignedUrl = await R2StorageClient.getPresignedDownloadUrl(attachment.storageKey, expiresInSeconds);
+    return {
+      url: presignedUrl || `/api/v1/attachments/${id}/download`,
+      expiresInSeconds
+    };
+  }
+
   static async getAttachmentFile(workspaceId: string, id: string) {
     const attachment = db.data.attachments.get(id);
     if (!attachment || attachment.workspaceId !== workspaceId) {
@@ -116,17 +145,39 @@ export class MediaService {
     }
 
     const filePath = path.resolve(config.localStoragePath, attachment.storageKey);
-    if (!fs.existsSync(filePath)) {
-      const err: any = new Error('Attachment file payload missing from storage');
-      err.statusCode = 404;
-      err.code = 'FILE_MISSING';
-      throw err;
+
+    // If local file exists, serve it
+    if (fs.existsSync(filePath)) {
+      return {
+        metadata: attachment,
+        filePath
+      };
     }
 
-    return {
-      metadata: attachment,
-      filePath
-    };
+    // Otherwise retrieve from R2 Storage on mvcdn.cc and populate cache
+    const r2Data = await R2StorageClient.getObjectBuffer(attachment.storageKey);
+    if (r2Data) {
+      try {
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(filePath, r2Data.buffer);
+        return {
+          metadata: attachment,
+          filePath
+        };
+      } catch (err) {
+        // Return buffer directly if cache write fails
+        return {
+          metadata: attachment,
+          buffer: r2Data.buffer
+        };
+      }
+    }
+
+    const err: any = new Error('Attachment file payload missing from storage');
+    err.statusCode = 404;
+    err.code = 'FILE_MISSING';
+    throw err;
   }
 
   static async deleteAttachment(workspaceId: string, id: string) {
@@ -138,12 +189,16 @@ export class MediaService {
       throw err;
     }
 
+    // 1. Delete from R2 Storage
+    await R2StorageClient.deleteObject(attachment.storageKey);
+
+    // 2. Delete local cache if present
     const filePath = path.resolve(config.localStoragePath, attachment.storageKey);
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
       } catch (e) {
-        // Log error without failing deletion
+        // Ignore cache unlink error
       }
     }
 
