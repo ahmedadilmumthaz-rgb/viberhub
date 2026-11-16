@@ -67,8 +67,10 @@ Access the dashboard at `http://localhost:3000`. Default seeded workspace accoun
 - **Reviewer**: `reviewer@viberhub.internal` / `ReviewerPass123!`
 - **Operator**: `operator@viberhub.internal` / `OperatorPass123!`
 
----
+## Documentation & Setup Guides
 
-## Production Deployment
-
-Refer to [`docs/deployment.md`](docs/deployment.md) for full VPS deployment instructions using Docker Compose and Nginx.
+- [Connecting Your Phone & Viber Number](docs/phone-connection-guide.md): Complete guide for linking your Viber number via Desktop Sync, Mobile Web, and Android ShareSheet.
+- [System Architecture](docs/architecture.md): High-level system design and security boundaries.
+- [REST API Reference](docs/api.md): Complete endpoints reference for `/api/v1`.
+- [Production Deployment](docs/deployment.md): VPS deployment instructions using Docker Compose and Nginx.
+- [Security Model](docs/security.md): Threat modeling, rate limits, and audit logs.
